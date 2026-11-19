@@ -1,0 +1,62 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Registration - Campus Food</title>
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+    <div>
+        <a href="/">Home</a>
+        <a href="/menu">Menu</a>
+        <a href="/login">Login</a>
+    </div>
+</nav>
+
+<section class="menu-heading">
+    <h1>Student Registration</h1>
+    <p>Create your Campus Food account</p>
+</section>
+
+<div class="cart-container">
+
+    <form method="POST" action="/register">
+
+        <label>Student Name</label>
+        <input type="text" name="name"
+               placeholder="Enter your name" required>
+
+        <br><br>
+
+        <label>Email Address</label>
+        <input type="email" name="email"
+               placeholder="Enter your email" required>
+
+        <br><br>
+
+        <label>Password</label>
+        <input type="password" name="password"
+               placeholder="Minimum 8 characters"
+               minlength="8" required>
+
+        <br><br>
+
+        <button type="submit">
+            Create Account
+        </button>
+
+    </form>
+
+    <p>Already have an account?
+        <a href="/login">Login here</a>
+    </p>
+
+</div>
+
+</body>
+</html>

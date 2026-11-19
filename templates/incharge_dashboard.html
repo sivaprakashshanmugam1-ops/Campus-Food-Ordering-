@@ -1,0 +1,239 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Incharge Dashboard - Campus Food</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+
+    <div>
+        <a href="/">Home</a>
+        <a href="/incharge_dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+</nav>
+
+<section class="menu-heading">
+    <h1>Incharge Dashboard</h1>
+    <p>Manage Student Orders</p>
+</section>
+
+<div class="cart-container">
+
+    <h2>Receipt Verification</h2>
+
+    <!-- Receipt ID Search -->
+    <h3>Search Using Receipt ID</h3>
+
+    <form onsubmit="searchReceipt(event)">
+
+        <input
+            type="text"
+            id="receipt_id"
+            placeholder="Enter Receipt ID"
+            required
+            style="width:100%; padding:12px; margin-bottom:10px;"
+        >
+
+        <button type="submit" class="continue-button">
+            Search Receipt
+        </button>
+
+    </form>
+
+    <hr>
+
+    <!-- QR Scanner -->
+    <h3>Scan Student QR Code</h3>
+
+    <p>Use your phone camera to scan the receipt QR code.</p>
+
+    <div id="reader" style="width:100%; max-width:400px;"></div>
+
+    <button
+        type="button"
+        onclick="startScanner()"
+        class="continue-button">
+        Start QR Scanner
+    </button>
+
+    <button
+        type="button"
+        onclick="stopScanner()"
+        class="continue-button">
+        Stop Scanner
+    </button>
+
+    <hr>
+
+    <!-- All Student Orders -->
+    <h2>All Student Orders</h2>
+
+    {% if orders %}
+
+    <table border="1" cellpadding="12" cellspacing="0" width="100%">
+
+        <tr>
+            <th>Receipt ID</th>
+            <th>Student Name</th>
+            <th>Student Email</th>
+            <th>Amount</th>
+            <th>Delivery Status</th>
+        </tr>
+
+        {% for order in orders %}
+
+        <tr>
+            <td>
+                <a href="{{ url_for('incharge_receipt', receipt_id=order.receipt_id) }}">
+                    {{ order.receipt_id }}
+                </a>
+            </td>
+
+            <td>
+                {{ order.student_name or "Guest / Old Order" }}
+            </td>
+
+            <td>
+                {{ order.student_email or "N/A" }}
+            </td>
+
+            <td>
+                ₹{{ "%.2f"|format(order.total_amount) }}
+            </td>
+
+            <td>
+                {% if order.delivery_status == "Delivered" %}
+                    <span style="color:green; font-weight:bold;">
+                        DELIVERED
+                    </span>
+                {% else %}
+                    <span style="color:red; font-weight:bold;">
+                        NOT DELIVERED
+                    </span>
+                {% endif %}
+            </td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+    {% else %}
+
+        <p>No orders available.</p>
+
+    {% endif %}
+
+</div>
+
+<script>
+
+let html5QrCode = null;
+
+function searchReceipt(event) {
+
+    event.preventDefault();
+
+    let receiptId = document.getElementById("receipt_id").value.trim();
+
+    if (receiptId) {
+        window.location.href =
+            "/incharge_receipt/" + encodeURIComponent(receiptId);
+    }
+}
+
+function startScanner() {
+
+    if (!window.Html5Qrcode) {
+        alert("QR Scanner library could not load.");
+        return;
+    }
+
+    if (html5QrCode) {
+        return;
+    }
+
+    html5QrCode = new Html5Qrcode("reader");
+
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+
+        function(decodedText) {
+
+            let scannedUrl;
+
+            try {
+
+                scannedUrl = new URL(decodedText);
+
+                if (
+                    scannedUrl.origin !== window.location.origin ||
+                    !scannedUrl.pathname.startsWith("/incharge_receipt/")
+                ) {
+                    alert("Invalid receipt QR code!");
+                    return;
+                }
+
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                    window.location.href = scannedUrl.pathname;
+                });
+
+            } catch (error) {
+
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+
+                    window.location.href =
+                        "/incharge_receipt/" +
+                        encodeURIComponent(decodedText);
+                });
+
+            }
+
+        },
+
+        function(errorMessage) {}
+
+    ).catch(function(error) {
+
+        html5QrCode = null;
+        alert("Unable to access camera. Please allow camera permission.");
+
+    });
+
+}
+
+function stopScanner() {
+
+    if (html5QrCode) {
+
+        html5QrCode.stop().then(() => {
+            html5QrCode.clear();
+            html5QrCode = null;
+        }).catch(function(error) {
+            html5QrCode = null;
+        });
+
+    }
+
+}
+
+</script>
+
+</body>
+</html>
+```

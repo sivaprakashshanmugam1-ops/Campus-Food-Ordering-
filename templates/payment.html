@@ -1,0 +1,93 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Razorpay Payment - Campus Food</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+
+    <div>
+        <a href="/">Home</a>
+        <a href="/menu">Menu</a>
+        <a href="/cart">My Cart</a>
+    </div>
+</nav>
+
+<section class="menu-heading">
+    <h1>Complete Your Payment</h1>
+    <p>Secure payment through Razorpay Test Mode</p>
+</section>
+
+<div class="cart-container">
+
+    <div class="cart-total">
+        <h2>Total Amount: ₹{{ "%.2f"|format(total) }}</h2>
+        <p>Order ID: {{ razorpay_order_id }}</p>
+    </div>
+
+    <button id="pay-button" type="button">
+        Pay ₹{{ "%.2f"|format(total) }}
+    </button>
+
+    <a class="continue-button" href="/cart">
+        Back to Cart
+    </a>
+
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<script>
+    const options = {
+        "key": "{{ razorpay_key_id }}",
+        "amount": "{{ amount }}",
+        "currency": "INR",
+        "name": "Campus Food",
+        "description": "College Food Order",
+        "order_id": "{{ razorpay_order_id }}",
+
+        "handler": function (response) {
+
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "/verify_payment";
+
+            const fields = {
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature
+            };
+
+            for (const key in fields) {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = key;
+                input.value = fields[key];
+                form.appendChild(input);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+        },
+
+        "theme": {
+            "color": "#3399cc"
+        }
+    };
+
+    const razorpay = new Razorpay(options);
+
+    document.getElementById("pay-button").onclick = function () {
+        razorpay.open();
+    };
+</script>
+
+</body>
+</html>

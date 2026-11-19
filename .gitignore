@@ -1,0 +1,8 @@
+venv/
+.env
+*Copy.env
+-copy.env
+__pycache__/
+*.pyc
+*.db
+*.lnk

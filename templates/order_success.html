@@ -1,0 +1,54 @@
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Successful - Campus Food</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+
+    <div>
+        <a href="/">Home</a>
+        <a href="/menu">Menu</a>
+    </div>
+</nav>
+
+<div class="cart-container" style="text-align:center;">
+
+    <h1>🎉 Order Placed Successfully!</h1>
+
+    <h2>Your Receipt ID</h2>
+
+    <h2 style="color:#f36b35;">
+        {{ receipt_id }}
+    </h2>
+
+    <p>Thank you for ordering with Campus Food!</p>
+
+    <h2>Your Receipt QR Code</h2>
+
+    <p>Scan this QR code to view the complete bill.</p>
+
+    <img
+        src="data:image/png;base64,{{ qr_code }}"
+        alt="Receipt QR Code"
+        style="width:220px; height:220px;"
+    >
+
+    <p>Please show this QR code to the canteen incharge.</p>
+
+    <a href="/menu" class="continue-button">
+        Order More Food
+    </a>
+
+</div>
+
+</body>
+</html>
+```

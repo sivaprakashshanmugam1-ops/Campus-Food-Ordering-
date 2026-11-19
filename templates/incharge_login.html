@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Incharge Login - Campus Food</title>
+
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+
+    <div>
+        <a href="/">Home</a>
+        <a href="/login">Student Login</a>
+    </div>
+</nav>
+
+<section class="menu-heading">
+    <h1>Canteen Incharge Login</h1>
+    <p>Login to manage student orders</p>
+</section>
+
+<div class="cart-container">
+
+    <form method="POST" action="/incharge_login">
+
+        <label>Email Address</label>
+
+        <input type="email"
+               name="email"
+               placeholder="Enter incharge email"
+               required>
+
+        <br><br>
+
+        <label>Password</label>
+
+        <input type="password"
+               name="password"
+               placeholder="Enter password"
+               required>
+
+        <br><br>
+
+        <button type="submit">
+            Incharge Login
+        </button>
+
+    </form>
+
+</div>
+
+</body>
+</html>

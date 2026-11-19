@@ -1,0 +1,6 @@
+Flask
+razorpay
+python-dotenv
+qrcode[pil]
+gunicorn
+psycopg2-binary

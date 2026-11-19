@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Food Menu - Campus Food</title>
+    <link rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <h2>🍔 Campus Food</h2>
+
+    <div>
+        <a href="/">Home</a>
+        <a href="/menu">Menu</a>
+        <a href="/cart">My Cart 🛒</a>
+
+        {% if session.get('user_id') %}
+            <span>Welcome, {{ session.get('user_name') }}</span>
+            <a href="/logout">Logout</a>
+        {% else %}
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+        {% endif %}
+    </div>
+</nav>
+
+<section class="menu-heading">
+    <h1>Our Delicious Menu 🍽️</h1>
+    <p>Choose your favourite food!</p>
+</section>
+
+<div class="food-container">
+
+    {% for food in foods %}
+
+    <div class="food-card">
+
+        <div class="food-image">
+            <img src="{{ url_for('static', filename='images/' + food.image) }}"
+                alt="{{ food.name }}">
+        </div>
+
+        <div class="food-details">
+            <h2>{{ food.name }}</h2>
+
+            <p class="food-price">
+                ₹{{ "%.2f"|format(food.price) }}
+            </p>
+
+            <form action="{{ url_for('add_to_cart', food_id=food.id) }}"
+                  method="POST">
+
+                <button type="submit">
+                    Add to Cart +
+                </button>
+
+            </form>
+        </div>
+
+    </div>
+
+    {% else %}
+
+    <p>No food items available.</p>
+
+    {% endfor %}
+
+</div>
+
+</body>
+</html>
