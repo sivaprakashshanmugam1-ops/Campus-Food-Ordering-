@@ -682,6 +682,9 @@ def order_success(receipt_id):
         qr_code=qr_base64
     )
 
+@app.route("/")
+def home():
+    return render_template("index.html")
 
 # INITIALIZE DATABASE
 init_db()
