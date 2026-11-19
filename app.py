@@ -1,19 +1,23 @@
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-import sqlite3
-import uuid
 import os
+import uuid
 import razorpay
 import qrcode
 import io
 import base64
+import psycopg2
+
+from psycopg2.extras import RealDictCursor
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
-
-app = Flask(__name__)
-app.secret_key = "college_food_secret_key_change_later"
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 load_dotenv()
+
+app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.secret_key = os.getenv("SECRET_KEY")
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
@@ -22,62 +26,96 @@ razorpay_client = razorpay.Client(
     auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
 )
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.path.join(BASE_DIR, "college_food.db")
-print("DATABASE LOCATION:", DATABASE)
+
+# PostgreSQL connection wrapper
+class DatabaseConnection:
+
+    def __init__(self):
+        self.connection = psycopg2.connect(
+            os.getenv("DATABASE_URL"),
+            cursor_factory=RealDictCursor
+        )
+
+    def execute(self, query, params=None):
+        cursor = self.connection.cursor()
+        query = query.replace("?", "%s")
+        cursor.execute(query, params or ())
+        return cursor
+
+    def commit(self):
+        self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
+
+    def close(self):
+        self.connection.close()
 
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return DatabaseConnection()
 
 
 
-# CREATE STUDENT AND INCHARGE ACCOUNT TABLE
-
+# CREATE DATABASE TABLES
 def init_db():
+
     conn = get_db()
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS order_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            receipt_id TEXT NOT NULL,
-            food_name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            unit_price REAL NOT NULL,
-            subtotal REAL NOT NULL
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS foods (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                price REAL NOT NULL,
+                image TEXT
+            )
+        """)
 
-    # Add delivery status to existing orders table
-    columns = conn.execute(
-        "PRAGMA table_info(orders)"
-    ).fetchall()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                receipt_id TEXT UNIQUE NOT NULL,
+                student_id INTEGER REFERENCES users(id),
+                total_amount REAL NOT NULL,
+                payment_status TEXT DEFAULT 'PENDING',
+                order_status TEXT DEFAULT 'PENDING',
+                delivery_status TEXT DEFAULT 'Not Delivered'
+            )
+        """)
 
-    if columns:
-        column_names = [column["name"] for column in columns]
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                receipt_id TEXT NOT NULL,
+                food_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_price REAL NOT NULL,
+                subtotal REAL NOT NULL
+            )
+        """)
 
-        if "delivery_status" not in column_names:
-            conn.execute("""
-                ALTER TABLE orders
-                ADD COLUMN delivery_status TEXT
-                DEFAULT 'Not Delivered'
-            """)
+        conn.commit()
+        print("POSTGRESQL TABLES CREATED SUCCESSFULLY")
 
-    conn.commit()
-    conn.close()
+    except Exception as e:
+        conn.rollback()
+        print("DATABASE INITIALIZATION ERROR:", str(e))
+        raise
+
+    finally:
+        conn.close()
 
 # FOOD MENU
 @app.route("/menu")
@@ -360,6 +398,7 @@ def verify_payment():
     finally:
         conn.close()
 
+
 # STUDENT REGISTRATION
 
 @app.route("/register", methods=["GET", "POST"])
@@ -396,11 +435,13 @@ def register():
             flash("Registration successful! Please login.")
             return redirect(url_for("login"))
 
-        except sqlite3.IntegrityError as e:
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
             print("REGISTRATION DATABASE ERROR:", str(e))
             flash("Email already registered!")
 
         except Exception as e:
+            conn.rollback()
             print("REGISTRATION ERROR:", str(e))
             flash("Registration failed. Check terminal.")
 
@@ -409,7 +450,9 @@ def register():
 
     return render_template("register.html")
 
+
 # STUDENT LOGIN
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
@@ -420,12 +463,14 @@ def login():
 
         conn = get_db()
 
-        user = conn.execute("""
-            SELECT * FROM users
-            WHERE email = ? AND role = 'student'
-        """, (email,)).fetchone()
+        try:
+            user = conn.execute("""
+                SELECT * FROM users
+                WHERE email = ? AND role = 'student'
+            """, (email,)).fetchone()
 
-        conn.close()
+        finally:
+            conn.close()
 
         if user and check_password_hash(
             user["password_hash"], password
@@ -443,6 +488,7 @@ def login():
 
 
 # INCHARGE LOGIN
+
 @app.route("/incharge_login", methods=["GET", "POST"])
 def incharge_login():
 
@@ -453,12 +499,14 @@ def incharge_login():
 
         conn = get_db()
 
-        user = conn.execute("""
-            SELECT * FROM users
-            WHERE email = ? AND role = 'incharge'
-        """, (email,)).fetchone()
+        try:
+            user = conn.execute("""
+                SELECT * FROM users
+                WHERE email = ? AND role = 'incharge'
+            """, (email,)).fetchone()
 
-        conn.close()
+        finally:
+            conn.close()
 
         if user and check_password_hash(
             user["password_hash"], password
@@ -475,6 +523,8 @@ def incharge_login():
 
     return render_template("incharge_login.html")
 
+
+
 # INCHARGE DASHBOARD
 
 @app.route("/incharge_dashboard")
@@ -486,20 +536,22 @@ def incharge_dashboard():
 
     conn = get_db()
 
-    orders = conn.execute("""
-        SELECT
-            orders.receipt_id,
-            orders.total_amount,
-            orders.student_id,
-            orders.delivery_status,
-            users.name AS student_name,
-            users.email AS student_email
-        FROM orders
-        LEFT JOIN users ON orders.student_id = users.id
-        ORDER BY orders.rowid DESC
-    """).fetchall()
+    try:
+        orders = conn.execute("""
+            SELECT
+                orders.receipt_id,
+                orders.total_amount,
+                orders.student_id,
+                orders.delivery_status,
+                users.name AS student_name,
+                users.email AS student_email
+            FROM orders
+            LEFT JOIN users ON orders.student_id = users.id
+            ORDER BY orders.id DESC
+        """).fetchall()
 
-    conn.close()
+    finally:
+        conn.close()
 
     return render_template(
         "incharge_dashboard.html",
@@ -514,7 +566,9 @@ def logout():
 
     flash("Logged out successfully!")
     return redirect(url_for("home"))
+
 # INCHARGE RECEIPT
+
 @app.route("/incharge_receipt/<receipt_id>", methods=["GET", "POST"])
 def incharge_receipt(receipt_id):
 
@@ -524,92 +578,93 @@ def incharge_receipt(receipt_id):
 
     conn = get_db()
 
-    # Handle delivery status button clicks
-    if request.method == "POST":
+    try:
 
-        new_status = request.form.get("delivery_status")
+        # Handle delivery status button clicks
+        if request.method == "POST":
 
-        if new_status not in ["Delivered", "Not Delivered"]:
-            conn.close()
-            flash("Invalid delivery status!")
+            new_status = request.form.get("delivery_status")
+
+            if new_status not in ["Delivered", "Not Delivered"]:
+                flash("Invalid delivery status!")
+                return redirect(url_for(
+                    "incharge_receipt",
+                    receipt_id=receipt_id
+                ))
+
+            current_order = conn.execute("""
+                SELECT delivery_status
+                FROM orders
+                WHERE receipt_id = ?
+            """, (receipt_id,)).fetchone()
+
+            if current_order is None:
+                return "Receipt not found!", 404
+
+            if current_order["delivery_status"] == "Delivered":
+                flash("FOOD ALREADY DELIVERED!")
+
+            else:
+                conn.execute("""
+                    UPDATE orders
+                    SET delivery_status = ?
+                    WHERE receipt_id = ?
+                    AND COALESCE(delivery_status, 'Not Delivered') != 'Delivered'
+                """, (new_status, receipt_id))
+
+                conn.commit()
+
+                if new_status == "Delivered":
+                    flash("Food marked as DELIVERED successfully!")
+                else:
+                    flash("Order status: NOT DELIVERED")
+
             return redirect(url_for(
                 "incharge_receipt",
                 receipt_id=receipt_id
             ))
 
-        current_order = conn.execute("""
-            SELECT delivery_status
+        # Get receipt and student details
+        order = conn.execute("""
+            SELECT
+                orders.receipt_id,
+                orders.total_amount,
+                orders.delivery_status,
+                users.name AS student_name,
+                users.email AS student_email
             FROM orders
-            WHERE receipt_id = ?
+            LEFT JOIN users ON orders.student_id = users.id
+            WHERE orders.receipt_id = ?
         """, (receipt_id,)).fetchone()
 
-        if current_order is None:
-            conn.close()
+        if order is None:
             return "Receipt not found!", 404
 
-        if current_order["delivery_status"] == "Delivered":
-            flash("FOOD ALREADY DELIVERED!")
+        # Get food items
+        items = conn.execute("""
+            SELECT food_name, quantity, unit_price, subtotal
+            FROM order_items
+            WHERE receipt_id = ?
+        """, (receipt_id,)).fetchall()
 
-        else:
-            conn.execute("""
-                UPDATE orders
-                SET delivery_status = ?
-                WHERE receipt_id = ?
-                  AND COALESCE(delivery_status, 'Not Delivered') != 'Delivered'
-            """, (new_status, receipt_id))
+        return render_template(
+            "incharge_receipt.html",
+            order=order,
+            items=items
+        )
 
-            conn.commit()
-
-            if new_status == "Delivered":
-                flash("Food marked as DELIVERED successfully!")
-            else:
-                flash("Order status: NOT DELIVERED")
-
+    finally:
         conn.close()
 
-        return redirect(url_for(
-            "incharge_receipt",
-            receipt_id=receipt_id
-        ))
-
-    # Get receipt and student details
-    order = conn.execute("""
-        SELECT
-            orders.receipt_id,
-            orders.total_amount,
-            orders.delivery_status,
-            users.name AS student_name,
-            users.email AS student_email
-        FROM orders
-        LEFT JOIN users ON orders.student_id = users.id
-        WHERE orders.receipt_id = ?
-    """, (receipt_id,)).fetchone()
-
-    if order is None:
-        conn.close()
-        return "Receipt not found!", 404
-
-    # Get food items
-    items = conn.execute("""
-        SELECT food_name, quantity, unit_price, subtotal
-        FROM order_items
-        WHERE receipt_id = ?
-    """, (receipt_id,)).fetchall()
-
-    conn.close()
-
-    return render_template(
-        "incharge_receipt.html",
-        order=order,
-        items=items
-    )
 # ORDER SUCCESS
+
 @app.route("/order_success/<receipt_id>")
 def order_success(receipt_id):
 
-    receipt_url = "http://192.168.1.4:5000" + url_for(
+    receipt_url = url_for(
         "incharge_receipt",
-        receipt_id=receipt_id
+        receipt_id=receipt_id,
+        _external=True
     )
 
     qr = qrcode.make(receipt_url)
@@ -628,6 +683,9 @@ def order_success(receipt_id):
     )
 
 
+# INITIALIZE DATABASE
+init_db()
+
+
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
